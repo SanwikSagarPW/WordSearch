@@ -2,6 +2,17 @@
 import { currentLang, loadTranslations, translateUI } from './Shared/language.js';
 import { saveConfig, loadConfig } from './Shared/configStore.js';
 
+// ============================================
+// ANALYTICS SETUP
+// ============================================
+const analytics = new AnalyticsManager();
+analytics.initialize('word_search_game', 'session_' + Date.now());
+
+let currentLevelId = null;
+let levelStartTime = 0;
+let hintsUsed = 0;
+let wordsFoundCount = 0;
+
 // Dynamic background gradients
 const backgroundGradients = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -255,7 +266,37 @@ function updateFoundDisplay() {
 function endGame(won) {
   stopTimer();
   
+  // ============================================
+  // ANALYTICS: Track Game Completion
+  // ============================================
+  const timeTaken = Date.now() - levelStartTime;
+  let totalXP = 0;
+  
   if (won) {
+    // Calculate XP with bonuses
+    const baseXP = 100;
+    const wordBonus = wordsFoundCount * 10;
+    const timeBonus = currentScore; // Use the current score as time bonus (200/100/50/0)
+    const hintPenalty = hintsUsed * 5;
+    totalXP = Math.max(0, baseXP + wordBonus + timeBonus - hintPenalty);
+    
+    // Track final metrics
+    analytics.addRawMetric('completion_time_seconds', Math.floor(timeTaken / 1000));
+    analytics.addRawMetric('final_score', currentScore);
+    analytics.addRawMetric('accuracy_percent', 100); // All words found = 100%
+    analytics.addRawMetric('total_xp_earned', totalXP);
+    
+    console.log('[Analytics] Game completed!', {
+      timeTaken: (timeTaken / 1000).toFixed(2) + 's',
+      wordsFound: wordsFoundCount,
+      hintsUsed: hintsUsed,
+      baseXP: baseXP,
+      wordBonus: wordBonus,
+      timeBonus: timeBonus,
+      hintPenalty: hintPenalty,
+      totalXP: totalXP
+    });
+    
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
     const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -271,10 +312,28 @@ function endGame(won) {
       });
     }, 300);
   } else {
-    // Time's up
+    // Time's up - incomplete
+    const completionPercent = Math.floor((wordsFoundCount / words.length) * 100);
+    analytics.addRawMetric('completion_time_seconds', Math.floor(timeTaken / 1000));
+    analytics.addRawMetric('completion_percent', completionPercent);
+    analytics.addRawMetric('total_xp_earned', 0);
+    
+    console.log('[Analytics] Game ended (timeout):', {
+      timeTaken: (timeTaken / 1000).toFixed(2) + 's',
+      wordsFound: wordsFoundCount,
+      totalWords: words.length,
+      completionPercent: completionPercent + '%'
+    });
+    
     alert(translations[currentLang].timeUp || "Time's up! Try again!");
     switchScreen('home');
   }
+  
+  // End level tracking and submit report
+  analytics.endLevel(currentLevelId, won, timeTaken, totalXP);
+  
+  console.log('[Analytics] Full Report:', analytics.getReportData());
+  analytics.submitReport();
 }
 
 // Screen switching
@@ -363,6 +422,11 @@ function giveHint() {
   if (cell) {
     cell.classList.add("hinted");
     setTimeout(() => cell.classList.remove("hinted"), 1500);
+    
+    // Track hint usage
+    hintsUsed++;
+    analytics.addRawMetric('hints_used', hintsUsed);
+    console.log('[Analytics] Hint used:', hintsUsed);
   }
 }
 
@@ -413,6 +477,26 @@ function initGame() {
   // Switch to game screen and start timer
   switchScreen('game');
   startTimer();
+  
+  // ============================================
+  // ANALYTICS: Track Game Start
+  // ============================================
+  const difficulty = settings.difficulty;
+  const category = settings.category === "__RANDOM__" ? "random" : settings.category;
+  currentLevelId = `${difficulty}_${category}_${wordCount}words`.toLowerCase().replace(/\s+/g, '_');
+  
+  analytics.startLevel(currentLevelId);
+  levelStartTime = Date.now();
+  hintsUsed = 0;
+  wordsFoundCount = 0;
+  
+  // Track game configuration
+  analytics.addRawMetric('difficulty', difficulty);
+  analytics.addRawMetric('category', category);
+  analytics.addRawMetric('word_count', wordCount);
+  analytics.addRawMetric('grid_size', `${gridWidth}x${gridHeight}`);
+  
+  console.log('[Analytics] Game started:', currentLevelId);
 }
 
 let startPos = null;
@@ -485,6 +569,32 @@ document.addEventListener("pointerup", () => {
       });
       
       updateFoundDisplay();
+      
+      // ============================================
+      // ANALYTICS: Track Word Found
+      // ============================================
+      wordsFoundCount++;
+      const wordFindTime = Date.now() - levelStartTime;
+      
+      analytics.recordTask(
+        currentLevelId,
+        'word_found_' + wordsFoundCount,
+        `Found word: ${word}`,
+        word,
+        word,
+        wordFindTime,
+        10 // XP per word found
+      );
+      
+      analytics.addRawMetric('words_found', wordsFoundCount);
+      analytics.addRawMetric('words_remaining', words.length - wordsFoundCount);
+      
+      console.log('[Analytics] Word found:', {
+        word: word,
+        wordsFound: wordsFoundCount,
+        totalWords: words.length,
+        timeElapsed: (wordFindTime / 1000).toFixed(2) + 's'
+      });
     }
   }
 
@@ -583,4 +693,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   
   // Make sure home screen is shown initially
   switchScreen('home');
+  
+  // ============================================
+  // ANALYTICS: Track Abandoned Sessions
+  // ============================================
+  window.addEventListener('beforeunload', () => {
+    if (currentLevelId && levelStartTime > 0) {
+      const level = analytics._getLevelById(currentLevelId);
+      if (level && !level.successful) {
+        const timeTaken = Date.now() - levelStartTime;
+        const completionPercent = Math.floor((wordsFoundCount / words.length) * 100);
+        
+        analytics.addRawMetric('session_abandoned', 'true');
+        analytics.addRawMetric('completion_percent', completionPercent);
+        analytics.endLevel(currentLevelId, false, timeTaken, 0);
+        analytics.submitReport();
+        
+        console.log('[Analytics] Session ended (abandoned)');
+      }
+    }
+  });
 });
