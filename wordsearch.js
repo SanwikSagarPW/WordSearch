@@ -47,7 +47,7 @@ let allCategories = {};
 let translations = {};
 let gridWidth = 10;
 let gridHeight = 10;
-let wordCount = 4;
+let wordCount = 10;
 let grid = [];
 let positions = {};
 let selected = [];
@@ -439,12 +439,12 @@ function initGame() {
   gridWidth = 10;
   gridHeight = 10;
 
-  // Validate word count - must be between 1 and 10
+  // Validate word count - must be between 1 and 20
   let count = parseInt(wordCountInput.value);
-  if (count > 10 || count < 1) {
+  if (count > 20 || count < 1) {
     wordCountInput.classList.add('invalid');
     const message = translations[currentLang]?.maxWords || 
-                   "Maximum 10 words allowed! Please enter a number between 1 and 10.";
+                   "Maximum 20 words allowed! Please enter a number between 1 and 20.";
     alert(message);
     return; // Prevent game from starting
   }
@@ -616,17 +616,17 @@ function showConfirmModal(callback) {
   const yesBtn = document.getElementById('confirmYes');
   const noBtn = document.getElementById('confirmNo');
   
-  modal.classList.add('show');
+  modal.classList.add('active');
   
   const handleYes = () => {
-    modal.classList.remove('show');
+    modal.classList.remove('active');
     yesBtn.removeEventListener('click', handleYes);
     noBtn.removeEventListener('click', handleNo);
     callback(true);
   };
   
   const handleNo = () => {
-    modal.classList.remove('show');
+    modal.classList.remove('active');
     yesBtn.removeEventListener('click', handleYes);
     noBtn.removeEventListener('click', handleNo);
     callback(false);
@@ -653,16 +653,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const defaults = {
     category: "__RANDOM__",
-    difficulty: "easy",
-    count: 4
+    difficulty: "medium",
+    count: 10
   };
 
   const restored = loadConfig("wordsearch", defaults);
   document.getElementById("categorySelect").value = restored.category;
   document.getElementById("difficultySelect").value = restored.difficulty;
   
-  // Ensure word count doesn't exceed 10
-  const restoredCount = Math.min(restored.count || 4, 10);
+  // Set active difficulty button
+  document.querySelectorAll('.difficulty-btn').forEach(btn => {
+    if (btn.dataset.difficulty === restored.difficulty) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Ensure word count doesn't exceed 20
+  const restoredCount = Math.min(restored.count || 10, 20);
   document.getElementById("wordCount").value = restoredCount;
 
   // Initialize audio
@@ -673,10 +682,40 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("hintButton")?.addEventListener("click", giveHint);
   document.getElementById("audioToggle")?.addEventListener("click", toggleAudio);
   
+  // Difficulty button listeners
+  document.querySelectorAll('.difficulty-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      // Remove active class from all buttons
+      document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('active'));
+      // Add active class to clicked button
+      this.classList.add('active');
+      // Update hidden select
+      const difficulty = this.dataset.difficulty;
+      document.getElementById('difficultySelect').value = difficulty;
+    });
+  });
+  
+  // Word count increment/decrement listeners
+  document.getElementById("increaseWords")?.addEventListener("click", () => {
+    const input = document.getElementById("wordCount");
+    let value = parseInt(input.value) || 10;
+    if (value < 20) {
+      input.value = value + 1;
+    }
+  });
+  
+  document.getElementById("decreaseWords")?.addEventListener("click", () => {
+    const input = document.getElementById("wordCount");
+    let value = parseInt(input.value) || 10;
+    if (value > 1) {
+      input.value = value - 1;
+    }
+  });
+  
   // Add real-time validation for word count input
   document.getElementById("wordCount")?.addEventListener("input", (e) => {
     const value = parseInt(e.target.value);
-    if (value > 10 || value < 1 || isNaN(value)) {
+    if (value > 20 || value < 1 || isNaN(value)) {
       e.target.classList.add('invalid');
     } else {
       e.target.classList.remove('invalid');

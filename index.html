@@ -13,36 +13,51 @@
   <!-- HOME SCREEN -->
   <div id="homeScreen" class="screen active">
     <div class="home-container">
-      <h1 class="game-title" data-i18n="title">🔍 Word Search</h1>
-      <p class="game-subtitle" data-i18n="subtitle">Find all the hidden words before time runs out!</p>
-      
-      <div class="settings-row">
-        <!-- CATEGORY -->
-        <div class="setting-item">
-          <label for="categorySelect" data-i18n="category">Category</label>
-          <select id="categorySelect"></select>
+      <!-- Comic-style Header -->
+      <div class="comic-header">
+        <img src="image/Word_search_title.png" alt="Word Search Title" class="title-image" />
+      </div>
+
+      <div class="game-settings">
+        <!-- PICK A TOPIC -->
+        <div class="setting-group">
+          <label class="setting-label">PICK A TOPIC</label>
+          <div class="custom-select-wrapper">
+            <span class="topic-icon">🌍</span>
+            <select id="categorySelect"></select>
+          </div>
         </div>
 
         <!-- DIFFICULTY -->
-        <div class="setting-item">
-          <label for="difficultySelect" data-i18n="difficulty">Difficulty</label>
-          <select id="difficultySelect">
+        <div class="setting-group">
+          <label class="setting-label">DIFFICULTY</label>
+          <div class="difficulty-buttons">
+            <button class="difficulty-btn" data-difficulty="easy">Easy<span class="check-badge">✓</span></button>
+            <button class="difficulty-btn active" data-difficulty="medium">Medium<span class="check-badge">✓</span></button>
+            <button class="difficulty-btn" data-difficulty="hard">Hard<span class="check-badge">✓</span></button>
+          </div>
+          <select id="difficultySelect" style="display: none;">
             <option value="easy" data-i18n="easy">Easy</option>
-            <option value="medium" data-i18n="medium">Medium</option>
+            <option value="medium" data-i18n="medium" selected>Medium</option>
             <option value="hard" data-i18n="hard">Hard</option>
           </select>
         </div>
 
-        <!-- WORD COUNT -->
-        <div class="setting-item">
-          <label for="wordCount" data-i18n="wordCount">Words</label>
-          <input type="number" id="wordCount" value="4" min="1" max="10" />
+        <!-- WORDS TO FIND -->
+        <div class="setting-group">
+          <label class="setting-label">WORDS TO FIND</label>
+          <div class="counter-wrapper">
+            <button class="counter-btn minus-btn" id="decreaseWords">−</button>
+            <input type="number" id="wordCount" class="word-count-input" value="10" min="1" max="20" readonly />
+            <button class="counter-btn plus-btn" id="increaseWords">+</button>
+          </div>
         </div>
-      </div>
 
-      <button id="startButton" class="play-button" data-i18n="start">
-        <span class="play-icon">▶</span> Play Game
-      </button>
+        <!-- PLAY GAME BUTTON -->
+        <button id="startButton" class="start-button">
+          PLAY GAME
+        </button>
+      </div>
 
       <div class="bottom-controls">
         <button id="audioToggle" class="audio-btn" title="Toggle Music">🔇</button>
