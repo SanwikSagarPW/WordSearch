@@ -272,8 +272,8 @@ function endGame(won) {
   let totalXP = 0;
   
   if (won) {
-    // 20 XP per word found (10 words × 20 = 200 max)
-    totalXP = wordsFoundCount * 20;
+    // Time-based XP: score (200/100/50/0) based on completion speed
+    totalXP = currentScore;
     
     // Track final metrics
     analytics.addRawMetric('completion_time_seconds', Math.floor(timeTaken / 1000));
@@ -574,7 +574,7 @@ document.addEventListener("pointerup", () => {
         word,
         word,
         wordFindTime,
-        20 // XP per word found (20 × 10 words = 200 max)
+        0 // XP tracked at game end via time-based score
       );
       
       analytics.addRawMetric('words_found', wordsFoundCount);
