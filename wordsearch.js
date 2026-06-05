@@ -6,7 +6,6 @@ import { saveConfig, loadConfig } from './Shared/configStore.js';
 // ANALYTICS SETUP
 // ============================================
 const analytics = new AnalyticsManager();
-analytics.initialize('word_search_game', 'session_' + Date.now());
 
 let currentLevelId = null;
 let levelStartTime = 0;
@@ -476,6 +475,7 @@ function initGame() {
   const category = settings.category === "__RANDOM__" ? "random" : settings.category;
   currentLevelId = `${difficulty}_${category}_${wordCount}words`.toLowerCase().replace(/\s+/g, '_');
   
+  analytics.initialize('word_search_game', 'session_' + Date.now());
   analytics.startLevel(currentLevelId);
   levelStartTime = Date.now();
   hintsUsed = 0;
