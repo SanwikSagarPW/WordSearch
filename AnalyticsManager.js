@@ -9,12 +9,18 @@ class AnalyticsManager {
 
     this._isInitialized = false;
     this._gameId = '';
-    this._sessionName = '';
+    this._sessionId = '';
     
     this._reportData = {
       gameId: '',
+      sessionId: '',
+      timestamp: '',
       name: '',
       xpEarnedTotal: 0,
+      xpEarned: 0,
+      xpTotal: 0,
+      bestXp: 0,
+      highestLevelPlayed: 0,
       rawData: [],
       diagnostics: {
         levels: []
@@ -36,18 +42,30 @@ class AnalyticsManager {
    * @param {string} gameId - Unique game identifier
    * @param {string} sessionName - Session/player identifier
    */
+  _generateSessionId() {
+    const ts = Date.now();
+    const rand = Math.random().toString(36).substring(2, 9);
+    return `session_${ts}_${rand}`;
+  }
+
   initialize(gameId, sessionName) {
     this._gameId = gameId;
-    this._sessionName = sessionName;
-    
+    this._sessionId = this._generateSessionId();
+
     this._reportData.gameId = gameId;
-    this._reportData.name = sessionName;
+    this._reportData.sessionId = this._sessionId;
+    this._reportData.timestamp = new Date().toISOString();
+    this._reportData.name = this._sessionId;
     this._reportData.diagnostics.levels = [];
     this._reportData.rawData = [];
     this._reportData.xpEarnedTotal = 0;
+    this._reportData.xpEarned = 0;
+    this._reportData.xpTotal = 0;
+    this._reportData.bestXp = 0;
+    this._reportData.highestLevelPlayed = 0;
     
     this._isInitialized = true;
-    console.log(`[Analytics] Initialized for: ${gameId}`);
+    console.log(`[Analytics] Initialized for: ${gameId} | session: ${this._sessionId}`);
   }
   
   /**
@@ -104,7 +122,16 @@ class AnalyticsManager {
       
       // Update global session totals
       this._reportData.xpEarnedTotal += xp;
-      
+      this._reportData.xpEarned = this._reportData.xpEarnedTotal;
+      this._reportData.xpTotal = this._reportData.xpEarnedTotal;
+      if (this._reportData.xpEarnedTotal > this._reportData.bestXp) {
+        this._reportData.bestXp = this._reportData.xpEarnedTotal;
+      }
+      this._reportData.highestLevelPlayed += 1;
+
+      // Emit auto-save payload for this level
+      this._sendAutoPayload(levelId, timeTakenMs);
+
       console.log('[Analytics] Level ended:', {
         levelId,
         successful,
@@ -114,6 +141,25 @@ class AnalyticsManager {
     } else {
       console.warn(`[Analytics] End Level called for unknown level: ${levelId}`);
     }
+  }
+
+  _sendAutoPayload(levelId, timeTakenMs) {
+    const autoPayload = {
+      highestLevelPlayed: this._reportData.highestLevelPlayed,
+      xpEarnedTotal: this._reportData.xpEarnedTotal,
+      name: 'Level Complete',
+      diagnostics: {
+        levels: [
+          {
+            levelId: levelId,
+            timeTaken: timeTakenMs
+          }
+        ]
+      }
+    };
+
+    console.log('[Analytics] Auto-Save Payload:', autoPayload);
+    this._dispatchPayload(autoPayload);
   }
   
   /**
@@ -163,36 +209,27 @@ class AnalyticsManager {
       console.error('[Analytics] Attempted to submit without initialization.');
       return;
     }
-    
-    // Build canonical payload
-    const payload = JSON.parse(JSON.stringify(this._reportData));
-    // ensure canonical fields expected by hosts
-    if (!payload.sessionId) payload.sessionId = (Date.now() + '-' + Math.random().toString(36));
-    if (!payload.timestamp) payload.timestamp = new Date().toISOString();
-    // map existing fields to common names
-    payload.xpEarned = payload.xpEarned || payload.xpEarnedTotal || 0;
-    payload.xpTotal = payload.xpTotal || payload.xpEarnedTotal || 0;
-    payload.bestXp = payload.bestXp || payload.xpEarnedTotal || 0;
 
-    // Enhanced console logging
+    // Build full session payload
+    const payload = JSON.parse(JSON.stringify(this._reportData));
+    payload.timestamp = new Date().toISOString();
+
     console.log('═══════════════════════════════════════════════════════');
-    console.log('[Analytics] REPORT SUBMITTED');
+    console.log('[Analytics] FULL SESSION PAYLOAD SUBMITTED');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('Game ID:', payload.gameId);
-    console.log('Session:', payload.name);
-    console.log('Total XP:', payload.xpEarnedTotal);
-    console.log('Levels Completed:', payload.diagnostics.levels.length);
-    console.log('Raw Metrics:', payload.rawData);
     console.log('Full Payload:', payload);
     console.log('═══════════════════════════════════════════════════════');
 
-    // Try delivery via several bridges, best-effort. If window is not present (test/node), just return payload
+    this._dispatchPayload(payload);
+  }
+
+  _dispatchPayload(payload) {
     if (typeof window === 'undefined') {
       return payload;
     }
 
-    // helpers for persistence/queueing
     const LS_KEY = 'ignite_pending_sessions_jsplugin';
+
     function savePending(p) {
       try {
         const list = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
@@ -203,7 +240,7 @@ class AnalyticsManager {
 
     function trySend(p) {
       let sent = false;
-      // site-local bridge
+
       try {
         if (window.myJsAnalytics && typeof window.myJsAnalytics.trackGameSession === 'function') {
           window.myJsAnalytics.trackGameSession(p);
@@ -211,7 +248,6 @@ class AnalyticsManager {
         }
       } catch (e) { /* continue */ }
 
-      // React Native WebView
       try {
         if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
           window.ReactNativeWebView.postMessage(JSON.stringify(p));
@@ -219,16 +255,14 @@ class AnalyticsManager {
         }
       } catch (e) { /* continue */ }
 
-      // parent/frame
       try {
         const target = window.__GodotAnalyticsParentOrigin || '*';
         window.parent.postMessage(p, target);
         sent = true;
       } catch (e) { /* continue */ }
 
-      // debug fallback - console
       if (!sent) {
-        try { console.log('Payload:' + JSON.stringify(p)); } catch (e) { /* swallow */ }
+        try { console.log('[Analytics] Payload (fallback):', JSON.stringify(p)); } catch (e) { /* swallow */ }
       }
 
       return sent;
@@ -243,27 +277,21 @@ class AnalyticsManager {
       } catch (e) { /* ignore */ }
     }
 
-    // attempt send
     const ok = trySend(payload);
     if (!ok) savePending(payload);
 
-    // ensure pending flush is registered once
     try {
-      if (typeof window !== 'undefined') {
-        window.addEventListener && window.addEventListener('online', flushPending);
-        window.addEventListener && window.addEventListener('load', flushPending);
-        // listen for handshake message to set parent origin
-        window.addEventListener && window.addEventListener('message', function (ev) {
-          try {
-            const msg = (typeof ev.data === 'string') ? JSON.parse(ev.data) : ev.data;
-            if (msg && msg.type === 'ANALYTICS_CONFIG' && msg.parentOrigin) {
-              window.__GodotAnalyticsParentOrigin = msg.parentOrigin;
-            }
-          } catch (e) { /* ignore */ }
-        });
-        // try flushing shortly after submit to catch same-page parent
-        setTimeout(flushPending, 2000);
-      }
+      window.addEventListener && window.addEventListener('online', flushPending);
+      window.addEventListener && window.addEventListener('load', flushPending);
+      window.addEventListener && window.addEventListener('message', function (ev) {
+        try {
+          const msg = (typeof ev.data === 'string') ? JSON.parse(ev.data) : ev.data;
+          if (msg && msg.type === 'ANALYTICS_CONFIG' && msg.parentOrigin) {
+            window.__GodotAnalyticsParentOrigin = msg.parentOrigin;
+          }
+        } catch (e) { /* ignore */ }
+      });
+      setTimeout(flushPending, 2000);
     } catch (e) { /* ignore */ }
   }
   
