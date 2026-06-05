@@ -273,12 +273,8 @@ function endGame(won) {
   let totalXP = 0;
   
   if (won) {
-    // Calculate XP with bonuses
-    const baseXP = 100;
-    const wordBonus = wordsFoundCount * 10;
-    const timeBonus = currentScore; // Use the current score as time bonus (200/100/50/0)
-    const hintPenalty = hintsUsed * 5;
-    totalXP = Math.max(0, baseXP + wordBonus + timeBonus - hintPenalty);
+    // 20 XP per word found (10 words × 20 = 200 max)
+    totalXP = wordsFoundCount * 20;
     
     // Track final metrics
     analytics.addRawMetric('completion_time_seconds', Math.floor(timeTaken / 1000));
@@ -289,11 +285,6 @@ function endGame(won) {
     console.log('[Analytics] Game completed!', {
       timeTaken: (timeTaken / 1000).toFixed(2) + 's',
       wordsFound: wordsFoundCount,
-      hintsUsed: hintsUsed,
-      baseXP: baseXP,
-      wordBonus: wordBonus,
-      timeBonus: timeBonus,
-      hintPenalty: hintPenalty,
       totalXP: totalXP
     });
     
@@ -583,7 +574,7 @@ document.addEventListener("pointerup", () => {
         word,
         word,
         wordFindTime,
-        10 // XP per word found
+        20 // XP per word found (20 × 10 words = 200 max)
       );
       
       analytics.addRawMetric('words_found', wordsFoundCount);
