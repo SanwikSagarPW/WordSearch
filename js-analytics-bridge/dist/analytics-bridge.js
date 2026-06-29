@@ -214,7 +214,12 @@
       payload.timestamp = new Date().toISOString();
 
       console.log('[Analytics] Full Session Payload:', payload);
-      this._dispatchPayload(payload);
+      const _bXpCur = payload.xpEarnedTotal || 0;
+    const _bXpKey = 'bestXp_' + (payload.gameId || '');
+    let _bXpPrev = 0; try { _bXpPrev = parseInt(localStorage.getItem(_bXpKey) || '0', 10) || 0; } catch (_e) {}
+    payload.bestXp = Math.max(_bXpCur, _bXpPrev);
+    if (_bXpCur > _bXpPrev) { try { localStorage.setItem(_bXpKey, String(_bXpCur)); } catch (_e) {} }
+    this._dispatchPayload(payload);
     }
 
     /**
